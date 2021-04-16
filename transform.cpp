@@ -39,7 +39,7 @@ float point::angle() {
     return 90 - to_degrees(acos(this->z / sqrt(pow(this->x, 2) + pow(this->y, 2) + pow(this->z, 2))));
 }
 
-const directory_pair directory_pairs[2] = {
+const vector<directory_pair> filter_points_dirs = {
     {"testing/velodyne_original", "testing/velodyne_filtered2"},
     {"training/velodyne_original", "training/velodyne_filtered2"},
 };
@@ -230,13 +230,8 @@ int test() {
     return 0;
 }
 
-int main(int argc, char *argv[]) {
-    unused(argc);
-    unused(argv);
-
-    test();
-
-    for(auto &pair: directory_pairs) {
+void filter_points(const vector<directory_pair> &dirs) {
+    for(auto &pair: dirs) {
         fs::create_directory(pair.target);
 
         // get list of paths
@@ -276,4 +271,13 @@ int main(int argc, char *argv[]) {
         /*
         */
     }
+}
+
+int main(int argc, char *argv[]) {
+    unused(argc);
+    unused(argv);
+
+    test();
+
+    filter_points(filter_points_dirs);
 }
