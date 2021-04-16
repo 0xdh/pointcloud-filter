@@ -15,6 +15,7 @@ namespace fs = std::filesystem;
 
 #define unused(x) (void)x
 
+static bool verbose = false;
 const float angle_delta = 0.2;
 
 struct directory_pair {
@@ -176,29 +177,20 @@ std::vector<point> filter_points(vector<point> &input) {
         }
     }
 
-    //cout << "Min angle is " << min_angle << endl;
-    //cout << "Max angle is " << max_angle << endl;
-    cout << "Kept " << (100.0 * output.size() / (float) input.size()) << endl;
+    if(verbose) {
+        cout << "Kept " << (100.0 * output.size() / (float) input.size()) << endl;
+    }
 
     return output;
 }
 
-std::vector<point> elevate_points(vector<point> &input) {
-    vector<point> output;
-
+void elevate_points(vector<point> &input) {
     for(auto &point: input) {
         point.z = point.z - 1.55;
     }
-
-    cout << "elevated points" << endl;
-
-    return output;
 }
 
 void filter_point_file(const fs::path &path, const directory_pair &pair) {
-    // print current file
-    cout << path << endl;
-
     // read source points in completely
     vector<point> source_data;
     ifstream source_file(path, ios::binary);
@@ -211,12 +203,12 @@ void filter_point_file(const fs::path &path, const directory_pair &pair) {
     vector<point> target_data = filter_points(source_data);
 
     // elevate points by 1.55 (from the perspective of the Lidar: So we need to substract the height from the point's z-value!)
-    vector<point> elevated_target_data = elevate_points(target_data);
+    elevate_points(target_data);
 
     // write points out
     fs::path target_path = pair.target / path.filename();
     ofstream target_file(target_path, ios::binary);
-    for(auto &p: elevated_target_data) {
+    for(auto &p: target_data) {
         if(!target_file.write(reinterpret_cast<char *>(&p), sizeof(p))) {
             cerr << "Error writing out file!" << endl;
             exit(1);
@@ -224,7 +216,86 @@ void filter_point_file(const fs::path &path, const directory_pair &pair) {
     }
 }
 
+// label files are TXT files with one label per line. every line
+// contains a label (as text), followed by parameters. this struct
+// represents such a label line.
+//    1    type         Describes the type of object: 'Car', 'Van', 'Truck',
+//                      'Pedestrian', 'Person_sitting', 'Cyclist', 'Tram',
+//                      'Misc' or 'DontCare'
+//    1    truncated    Float from 0 (non-truncated) to 1 (truncated), where
+//                      truncated refers to the object leaving image boundaries
+//    1    occluded     Integer (0,1,2,3) indicating occlusion state:
+//                      0 = fully visible, 1 = partly occluded
+//                      2 = largely occluded, 3 = unknown
+//   1    alpha        Observation angle of object, ranging [-pi..pi]
+//    4    bbox         2D bounding box of object in the image (0-based index):
+//                      contains left, top, right, bottom pixel coordinates
+//    3    dimensions   3D object dimensions: height, width, length (in meters)
+//    3    location     3D object location x,y,z in camera coordinates (in meters)
+//    1    rotation_y   Rotation ry around Y-axis in camera coordinates [-pi..pi]
+//    1    score        Only for results: Float, indicating confidence in
+//                      detection, needed for p/r curves, higher is better.
+struct label_item {
+    std::string type;
+    float truncated;
+    float occluded;
+    float alpha;
+    float bbox[4];
+    float dimensions[3];
+    float location[3];
+    float rotation_y;
+    // float score;
+
+    friend ostream& operator<<(ostream& o, const label_item& i) {
+        o << i.type << " " << i.truncated << " " << i.occluded << " " << i.alpha << " ";
+        o << i.bbox[0] << " " << i.bbox[1] << " " << i.bbox[2] << " " << i.bbox[3] << " ";
+        o << i.dimensions[0] << " " << i.dimensions[1] << " " << i.dimensions[2] << " ";
+        o << i.location[0] << " " << i.location[1] << " " << i.location[2] << " ";
+        o << i.rotation_y; // " " << i.score;
+    }
+};
+
+bool keep_label(const label_item &item) {
+    return true;
+}
+
+void elevate_label(label_item &item) {
+    // TODO
+}
+
 void filter_label_file(const fs::path &path, const directory_pair &pair) {
+    ifstream file(path);
+    std::string line;
+    vector<label_item> items;
+
+    // where to write out label files
+    fs::path target_path = pair.target / path.filename();
+    ofstream target_file(target_path);
+
+    // go through labels, parse label line and filter those out that are to be kept.
+    while(std::getline(file, line)) {
+        label_item item;
+        std::stringstream linestream(line);
+        linestream >> item.type;
+        linestream >> item.truncated;
+        linestream >> item.occluded;
+        linestream >> item.alpha;
+        linestream >> item.bbox[0] >> item.bbox[1] >> item.bbox[2] >> item.bbox[3];
+        linestream >> item.dimensions[0] >> item.dimensions[1] >> item.dimensions[2];
+        linestream >> item.location[0] >> item.location[1] >> item.location[2];
+        linestream >> item.rotation_y;
+
+        // make sure parsing line worked
+        if(!linestream) {
+            cout << "ERROR parsing line " << line << endl;
+            exit(1);
+        }
+
+        if(keep_label(item)) {
+            elevate_label(item);
+            target_file << item << endl;
+        }
+    }
 }
 
 int test() {
@@ -332,6 +403,5 @@ int main(int argc, char *argv[]) {
     test();
 
     filter_points(point_dirs);
-
     filter_labels(label_dirs);
 }
