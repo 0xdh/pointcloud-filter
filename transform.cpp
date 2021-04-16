@@ -39,9 +39,13 @@ float point::angle() {
     return 90 - to_degrees(acos(this->z / sqrt(pow(this->x, 2) + pow(this->y, 2) + pow(this->z, 2))));
 }
 
-const vector<directory_pair> filter_points_dirs = {
-    {"testing/velodyne_original", "testing/velodyne_filtered2"},
-    {"training/velodyne_original", "training/velodyne_filtered2"},
+const vector<directory_pair> point_dirs = {
+    {"testing/velodyne_original", "testing/velodyne_filtered"},
+    {"training/velodyne_original", "training/velodyne_filtered"},
+};
+
+const vector<directory_pair> label_dirs = {
+    {"training/label_2", "training/label_2_filtered"},
 };
 
 struct angle_mapping {
@@ -191,7 +195,7 @@ std::vector<point> elevate_points(vector<point> &input) {
     return output;
 }
 
-void filter_file(const fs::path &path, const directory_pair &pair) {
+void filter_point_file(const fs::path &path, const directory_pair &pair) {
     // print current file
     cout << path << endl;
 
@@ -218,6 +222,9 @@ void filter_file(const fs::path &path, const directory_pair &pair) {
             exit(1);
         }
     }
+}
+
+void filter_label_file(const fs::path &path, const directory_pair &pair) {
 }
 
 int test() {
@@ -254,22 +261,67 @@ void filter_points(const vector<directory_pair> &dirs) {
                 source_files.pop_front();
                 source_files_lock.unlock();
 
-                filter_file(path, pair);
+                filter_point_file(path, pair);
             }
         };
 
+        // use as many threads as there are CPU cores in the system
         size_t thread_count = thread::hardware_concurrency();
+
+        // launch thread pool with a shared work queue
         vector<thread> pool;
         for(size_t i = 0; i < thread_count; i++) {
             pool.push_back(thread(work));
         }
 
+        // wait for all work to be done
         for(auto &thread: pool) {
             thread.join();
         }
+    }
+}
 
-        /*
-        */
+void filter_labels(const vector<directory_pair> &dirs) {
+    for(auto &pair: dirs) {
+        fs::create_directory(pair.target);
+
+        // get list of paths
+        deque<fs::path> source_files;
+        for(auto &p: fs::directory_iterator(pair.source)) {
+            source_files.push_back(p.path());
+        }
+
+        mutex source_files_lock;
+
+        auto work = [&source_files_lock, &source_files, &pair] {
+            while(true) {
+                source_files_lock.lock();
+                if(!source_files.size()) {
+                    source_files_lock.unlock();
+                    return;
+                }
+
+                auto path = source_files.front();
+                source_files.pop_front();
+                source_files_lock.unlock();
+
+                filter_label_file(path, pair);
+            }
+        };
+
+        // use as many threads as there are CPU cores in the system
+        size_t thread_count = thread::hardware_concurrency();
+
+        // launch thread pool with a shared work queue
+        vector<thread> pool;
+        for(size_t i = 0; i < thread_count; i++) {
+            pool.push_back(thread(work));
+        }
+
+        // wait for all work to be done
+        for(auto &thread: pool) {
+            thread.join();
+        }
     }
 }
 
@@ -279,5 +331,7 @@ int main(int argc, char *argv[]) {
 
     test();
 
-    filter_points(filter_points_dirs);
+    filter_points(point_dirs);
+
+    filter_labels(label_dirs);
 }
