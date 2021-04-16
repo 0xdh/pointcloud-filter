@@ -179,6 +179,18 @@ std::vector<point> filter_points(vector<point> &input) {
     return output;
 }
 
+std::vector<point> elevate_points(vector<point> &input) {
+    vector<point> output;
+
+    for(auto &point: input) {
+        point.z = point.z - 1.55;
+    }
+
+    cout << "elevated points" << endl;
+
+    return output;
+}
+
 void filter_file(const fs::path &path, const directory_pair &pair) {
     // print current file
     cout << path << endl;
@@ -194,10 +206,13 @@ void filter_file(const fs::path &path, const directory_pair &pair) {
     // filter points
     vector<point> target_data = filter_points(source_data);
 
+    // elevate points by 1.55 (from the perspective of the Lidar: So we need to substract the height from the point's z-value!)
+    vector<point> elevated_target_data = elevate_points(target_data);
+
     // write points out
     fs::path target_path = pair.target / path.filename();
     ofstream target_file(target_path, ios::binary);
-    for(auto &p: target_data) {
+    for(auto &p: elevated_target_data) {
         if(!target_file.write(reinterpret_cast<char *>(&p), sizeof(p))) {
             cerr << "Error writing out file!" << endl;
             exit(1);
