@@ -260,7 +260,7 @@ bool keep_label(const label_item &item) {
 }
 
 void elevate_label(label_item &item) {
-    // TODO
+    item.location[2] =  item.location[2] - 1.55;
 }
 
 void filter_label_file(const fs::path &path, const directory_pair &pair) {
@@ -291,10 +291,9 @@ void filter_label_file(const fs::path &path, const directory_pair &pair) {
             exit(1);
         }
 
-        if(keep_label(item)) {
-            elevate_label(item);
-            target_file << item << endl;
-        }
+        elevate_label(item);
+        target_file << item << endl;
+
     }
 }
 
